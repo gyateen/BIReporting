@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import com.power2sme.reporting.constants.ReportingConstants;
+import com.power2sme.reporting.mapper.SQLExcelTypeMap;
 
 @Configuration
 @ComponentScan(basePackages = {"com.power2sme.reporting", "com.power2sme.dms.client"})
@@ -23,5 +24,11 @@ public class ReportingConfig {
 		dataSource.setUsername(ReportingConstants.DB_USER);
 		dataSource.setPassword(ReportingConstants.DB_PASSWORD);
 		return dataSource;
+	}
+	
+	@Bean
+	SQLExcelTypeMap getExcelTypeMap()
+	{
+		return new SQLExcelTypeMap();
 	}
 }

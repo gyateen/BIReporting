@@ -1,11 +1,23 @@
 package com.power2sme.etl.job;
 
+import java.util.Date;
+import java.util.Map;
 import java.util.Properties;
 
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import javax.sql.DataSource;
 
+import org.apache.commons.jexl2.JexlContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import com.power2sme.etl.config.DataSourceConfig;
 import com.power2sme.etl.config.ETLConfig;
-import com.power2sme.etl.constants.ETLConstants;
+import com.power2sme.etl.entity.InputETLQuery;
+import com.power2sme.etl.entity.OutputETLQuery;
+import com.power2sme.etl.input.ETLReader;
+import com.power2sme.etl.jdbc.JdbcTemplateMapper;
+import com.power2sme.etl.logging.LoggingService;
+import com.power2sme.etl.rules.ETLRule;
 import com.power2sme.etl.service.ETLService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -13,47 +25,129 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ETLJob {
 
+	private static AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ETLConfig.class);
 	
-	public static void runJob(Properties contextProp)
+	private static LoggingService loggingService = context.getBean(LoggingService.class);
+	
+	private static Long runId = null;
+	private static void configureDataSources(Properties contextProp)
 	{
-		ETLConstants.init(contextProp);
-		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ETLConfig.class);
-		ETLService etlService = context.getBean(ETLService.class);
-		log.info("Starting job");
-		String srcSchema = contextProp.getProperty("SRC_SCHEMA");
-		String tgtSchema = contextProp.getProperty("TGT_SCHEMA");
-		String tgtUser = contextProp.getProperty("TGT_USER");
-		String srcUser = contextProp.getProperty("SRC_USER");
-		String srcQuery = contextProp.getProperty("QRY");
-		String tgtTable = contextProp.getProperty("TGT_TBL");
+		JdbcTemplateMapper jdbcMapper = context.getBean(JdbcTemplateMapper.class);
+		String srcDataBase = contextProp.getProperty("SRC_DATABASE");
+		jdbcMapper.addDataSource(srcDataBase, getDataSourceForSource(contextProp));
+		String targetDataBase = contextProp.getProperty("TGT_DATABASE");
+		jdbcMapper.addDataSource(targetDataBase, getDataSourceForTarget(contextProp));
 		
-		
-		etlService.getETLQuery(srcSchema, srcQuery, tgtSchema, tgtTable, null);
+	}
 	
-	@SuppressWarnings("resource")
-	public static void main(String[] args) {
+	private static synchronized void generateRunId()
+	{
+		if(runId == null)
+		{
+			ETLService etlService = context.getBean(ETLService.class);
+			runId = etlService.initiateJobRun();
+		}
+	}
+	
+	public static long initJob(Properties contextProp)
+	{
+		configureDataSources(contextProp);
+		generateRunId();
+		log.info("Component initialization complete");
+		return runId;
+	}
+	
+	
+	
+	private static DataSource getDataSourceForTarget(Properties contextProp) {
+		
+		DriverManagerDataSource dataSource = new DriverManagerDataSource();
+		dataSource.setDriverClassName(DataSourceConfig.getDriverClass(contextProp.getProperty("TGT_DB_SERVER")));
+		dataSource.setUrl(contextProp.getProperty("TGT_URL"));
+		dataSource.setUsername(contextProp.getProperty("TGT_USER"));
+		dataSource.setPassword(contextProp.getProperty("TGT_PASSWORD"));
+		return dataSource;
+	}
 
-		ETLJob.runJob(getTestContext());
+
+
+	private static DataSource getDataSourceForSource(Properties contextProp) {
+
+		DriverManagerDataSource dataSource = new DriverManagerDataSource();
+		dataSource.setDriverClassName(DataSourceConfig.getDriverClass(contextProp.getProperty("SRC_DB_SERVER")));
+		dataSource.setUrl(contextProp.getProperty("SRC_URL"));
+		dataSource.setUsername(contextProp.getProperty("SRC_USER"));
+		dataSource.setPassword(contextProp.getProperty("SRC_PASSWORD"));
+		return dataSource;
 	}
-	
-	public static Properties getTestContext()
+
+
+	public static ETLReader runInputJob(Long runId, Properties contextProp)
 	{
-		Properties contextProp = new Properties();
-		contextProp.setProperty("TGT_DRIVER", "com.mysql.jdbc.Driver");
-		contextProp.setProperty("SRC_DRIVER", "com.microsoft.sqlserver.jdbc.SQLServerDriver");
-		contextProp.setProperty("TGT_DB_PASSWORD", "^C,qaJ36B");
-		contextProp.setProperty("TGT_USER", "team_db_wrhouse");
-		contextProp.setProperty("TGT_DB_URL", "jdbc:mysql://192.168.1.14:3306/p2s_ctrl");
-		contextProp.setProperty("SRC_DB_PASSWORD", "zsa!123");
-		contextProp.setProperty("SRC_USER", "shweta");
-		contextProp.setProperty("SRC_DB_URL", "jdbc:sqlserver://103.25.172.167:1433;");
-		contextProp.setProperty("REPORTING_DATE_FORMAT", "yyyy-MM-dd");
-		contextProp.setProperty("JOB_ID", "2");
-		contextProp.setProperty("QRY", "select * from bs_nav_cluster_details")
-		contextProp.setProperty("TGT_SCHEMA", "p2s_bs");
-		contextProp.setProperty("TGT_TBL", "bs_nav_cluster_details");
-		return contextProp;
+		
+		
+			ETLService etlService = context.getBean(ETLService.class);
+			int jobId = Integer.parseInt(contextProp.getProperty("JOB_ID"));
+			log.info("Starting input job for job id: "+ jobId +" run id:"+runId);
+			ETLReader etlReader = null;
+			
+			String schema = contextProp.getProperty("SRC_SCHEMA");
+			String srcQuery = contextProp.getProperty("QRY");
+			InputETLQuery inputQuery = etlService.getETLQueryForInput(null, schema, srcQuery);	
+			Date startDate = new Date();
+			try
+			{
+				
+				etlReader =  etlService.executeInputETLQueryForFuture(inputQuery,contextProp.getProperty("SRC_DATABASE") );
+	
+			}
+			catch(RuntimeException ex)
+			{
+				loggingService.logJob(runId,jobId, startDate, new Date(), "select",0, ex);
+				log.error("Error while executing job "+jobId+ " "+ex);
+				
+			}
+			
+			
+			return etlReader;
 	}
 	
+	public static ETLReader runStagingJob(Long runId, Properties contextProp, ETLReader etlReader, JexlContext jexlContext, Map<String, ETLRule> ruleMap, Map<String, String[]> domainMap)
+	{
+		int jobId = Integer.parseInt(contextProp.getProperty("JOB_ID"));
+		ETLService etlService = context.getBean(ETLService.class);
+		log.info("Starting staging job for job id: "+ jobId +" run id:"+runId);
+		String schema = contextProp.getProperty("TGT_SCHEMA");
+		String table = contextProp.getProperty("TGT_TABLE");
+		Date jobStartDate = new Date();
+	
+		
+		if(etlReader == null)
+			return null;				
+		return etlService.stageRecordsInBatches(jobId, etlReader,jexlContext, ruleMap, domainMap);
+			
+	}
+	
+	public static void runOutputJob(long runId, ETLReader etlReader, Properties contextProp)
+	{
+		int jobId = Integer.parseInt(contextProp.getProperty("JOB_ID"));
+		ETLService etlService = context.getBean(ETLService.class);
+		log.info("Starting output job for job id: "+ jobId +" run id:"+runId);
+		String schema = contextProp.getProperty("TGT_SCHEMA");
+		String table = contextProp.getProperty("TGT_TABLE");
+		String stageTable = contextProp.getProperty("TGT_STAGE_TABLE");
+		Date jobStartDate = new Date();
+	
+		if(etlReader == null)
+			return;				
+		OutputETLQuery outputQuery = etlService.getETLQueryForOutput(table, stageTable, schema, etlReader.getRowHeader().getColumnHeaders().size(),null);
+		int totalRecordsInserted = etlService.executeOutputETLQuery(jobId, etlReader, outputQuery,contextProp.getProperty("TGT_DATABASE") );	
+		etlReader.closeReader();
+		loggingService.logJob(runId, jobId, jobStartDate, new Date(), "insert",totalRecordsInserted);
+			
+	}
+	
+	
+		
 }
 	

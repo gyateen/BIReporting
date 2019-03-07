@@ -39,7 +39,7 @@ public class ReportingJob {
 		contextProp.setProperty("DB_USER", "team_db_wrhouse");
 		contextProp.setProperty("DB_URL", "jdbc:mysql://103.25.172.143:3306/p2s_ctrl");
 		contextProp.setProperty("REPORTING_DATE_FORMAT", "yyyy-MM-dd");
-		contextProp.setProperty("REPORT_ID", "2");
+		contextProp.setProperty("REPORT_ID", "999");
 		contextProp.setProperty("REPORTING_DIR", "/home/yateen/talend_reports");
 		return contextProp;
 	}

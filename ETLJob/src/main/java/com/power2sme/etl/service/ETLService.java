@@ -1,18 +1,26 @@
 package com.power2sme.etl.service;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
+import org.apache.commons.jexl2.JexlContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.google.common.collect.Lists;
 import com.power2sme.etl.dao.ETLDao;
-import com.power2sme.etl.entity.ETLQuery;
 import com.power2sme.etl.entity.ETLRecord;
 import com.power2sme.etl.entity.ETLRowHeader;
+import com.power2sme.etl.entity.InputETLQuery;
+import com.power2sme.etl.entity.OutputETLQuery;
+import com.power2sme.etl.input.ETLReader;
+import com.power2sme.etl.job.ETLData;
+import com.power2sme.etl.rules.ETLRule;
+import com.power2sme.etl.staging.ETLStager;
+import com.power2sme.etl.staging.STAGE_ERROR;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,60 +36,96 @@ public class ETLService {
 		this.etlDao = etlDao;
 	}
 	
-	
-	public void executeETLQuery(ETLQuery etlQuery)
+	public ETLData executeInputETLQuery(InputETLQuery etlQuery, String srcDataBase)
 	{
-		try
-		{
-			log.info(new Date() + " Truncating table: " + etlQuery.getTargetTable());
-			etlDao.truncateTable(etlQuery.getTargetTable(), etlQuery.getTargetDB());
-			ETLRowHeader header = new ETLRowHeader();
-			
-			log.info(new Date()+" Executing query: "+ etlQuery.getSrcQuery());
-			List<ETLRecord> records = etlDao.fetchETLRecords(etlQuery.getSrcQuery(), etlQuery.getSrcDB(), header);
-			log.info(new Date()+ " total records count: "+records.size());
-			String insertQuery = constructInsertQuery(etlQuery.getTargetTable(),etlQuery.getTargetDB(),header.getColumnHeaders().size());
-			log.info("Executing insert query: "+insertQuery);
-			Date jobStartDate = new Date();
-			insertRecordsInBatches(insertQuery, etlQuery.getTargetDB(), records, header);
-			Date jobEndDate = new Date();
-			log.info("job Start time"+jobStartDate);
-			
-			log.info("job End time"+jobEndDate);
-			log.info(new Date()+" Insert records complete");
-		}
-		catch(Exception ex)
-		{
-			log.error("Error while executing query:"+ex);
-		}
+		log.info("Executing select query: "+etlQuery.getQuery());
+		ETLRowHeader header = new ETLRowHeader();
+		List<ETLRecord> records = etlDao.fetchETLRecords(etlQuery.getQuery(),srcDataBase , header);
+		ETLData etlData = new ETLData();
+		etlData.setRowHeader(header);
+		etlData.setEtlRecords(records);
+		return etlData;
 	}
 	
-	public void insertRecordsInBatches(String insertQuery, String targetDB,List<ETLRecord> etlRecords, ETLRowHeader header) throws SQLException
+	public ETLReader<ETLRecord> executeInputETLQueryForFuture(InputETLQuery etlQuery, String srcDataBase)
+	{
+		log.info("Executing select query: "+etlQuery.getQuery());
+		ETLRowHeader header = new ETLRowHeader();
+		
+		ETLReader<ETLRecord> etlReader = etlDao.fetchETLReader(etlQuery.getQuery(),srcDataBase , header);
+		return etlReader;
+	}
+	
+	public int executeOutputETLQuery(int jobId, List<ETLRecord> etlRecords, OutputETLQuery etlQuery, String database)
+	{
+		log.info(new Date() + " Truncating table: " + etlQuery.getTable());
+		etlDao.truncateTable(etlQuery.getTable(),etlQuery.getSchema(), database);
+		log.info("Executing insert query: "+ etlQuery.getQuery());
+		return insertRecordsInBatches(jobId, etlQuery.getQuery(), database, etlRecords);
+	}
+	
+	public int executeOutputETLQuery(int jobId, ETLReader etlReader, OutputETLQuery etlQuery, String database)
+	{
+		log.info(new Date() + " Truncating table: " + etlQuery.getTable());
+		etlDao.truncateTable(etlQuery.getTable(),etlQuery.getSchema(), database);
+		log.info("Executing insert query: "+ etlQuery.getQuery());
+		String stageQuery = null;
+		if(etlReader instanceof ETLStager)
+		{
+			log.info(new Date() + " Truncating table: " + etlQuery.getStageTable());
+			stageQuery = constructInsertQuery(etlQuery.getStageTable(), etlQuery.getSchema(), etlReader.getRowHeader().getColumnHeaders().size() + 2);
+			etlDao.truncateTable(etlQuery.getStageTable(),etlQuery.getSchema(), database);
+			
+		}
+		return insertRecordsInBatches(jobId, etlQuery.getQuery(), stageQuery,database, etlReader);
+			
+	}
+	public int insertRecordsInBatches(int jobId, String insertQuery, String targetDB,List<ETLRecord> etlRecords)
 	{
 		int batchSize = 10000;
 		List<List<ETLRecord>> batchList = Lists.partition(etlRecords, batchSize);
-		int counter =1;
-		
-		
-		for(List<ETLRecord> batch: batchList)
+		int transactionBatches = batchList.size();
+		int recordsInserted = 0;
+		int batchCounter = 0;
+		try
 		{
-			Date startDate = new Date();
-			
-			etlDao.insertETLBatch(insertQuery, targetDB, batch, header);
-			Date endDate = new Date();
-			log.info("Start time"+startDate);
-			log.info("End time"+endDate);
-			
-			counter++;
+			for(List<ETLRecord> batch: batchList)
+			{
+				
+				Date startDate = new Date();
+				
+				try
+				{
+					recordsInserted += etlDao.insertETLBatch(insertQuery, targetDB, batch, false);
+					log.info("Job ID " + jobId+" records inserted: "+ recordsInserted);
+					
+				}
+				catch(SQLException ex)
+				{
+					log.error("Error while inserting batch "+ex);
+				}
+				Date endDate = new Date();
+				log.info("Start time"+startDate);
+				log.info("End time"+endDate);
+				batchCounter++;
+				if(batchCounter < transactionBatches)
+					batch.clear();
+			}
 		}
+		catch(RuntimeException ex)
+		{
+			log.error("Error while iterating through transaction batch list" + ex);
+		}
+		
+		return recordsInserted;
 		
 		
 	}
 	
-	String constructInsertQuery(String table, String db, int columnCount)
+	public static String constructInsertQuery(String table, String schema, int columnCount)
 	{
 		StringBuilder query = new StringBuilder("insert into ");
-		query.append(db).append(".").append(table);
+		query.append(schema).append(".").append(table);
 		query.append(" values(");
 		for(int i =0;i<columnCount-1;i++)
 		{
@@ -92,30 +136,106 @@ public class ETLService {
 		return query.toString();
 	}
 	
-	
 		
-	public void fetchAndExecuteJobs() {
+
+
+	public InputETLQuery getETLQueryForInput(String table, String srcSchema, String srcQuery) {
 		
-		log.info("Fetching etlQueries from table");
-		List<ETLQuery> etlQueries = etlDao.fetchqueriesForJob(1);
-		for(ETLQuery etlQuery: etlQueries)
+		InputETLQuery query = new InputETLQuery();
+		query.setQuery(srcQuery);
+		query.setSchema(srcSchema);
+		query.setTable(table);
+		return query;
+	}
+
+	public OutputETLQuery getETLQueryForOutput(String table, String stageTable, String schema, int columnCount, String targetQuery) {
+		
+		String query = targetQuery;
+		if(query == null)
+			query = constructInsertQuery(table,schema, columnCount);
+		OutputETLQuery etlQuery = new OutputETLQuery();
+		etlQuery.setQuery(query);
+		etlQuery.setSchema(schema);
+		etlQuery.setTable(table);
+		etlQuery.setStageTable(stageTable);
+		return etlQuery;
+	}
+
+	public long initiateJobRun() {
+		
+		
+		return etlDao.insertRunForJob();
+	}
+
+	public int insertRecordsInBatches(int jobId, String insertQuery, String stageQuery, String targetDB,ETLReader<ETLRecord> etlReader) {
+		
+		int recordsInserted = 0;
+		List<ETLRecord> batch = null;
+		while(etlReader.hasRecord())
 		{
-			if(etlQuery.getSrcTable().equalsIgnoreCase("[BEBB_India$Cust_ Ledger Entry]"))
-				executeETLQuery(etlQuery);
-		}
+			List<ETLRecord> passBatch =null;
+			List<ETLRecord> errorBatch =null;
+			try
+			{
+				batch = etlReader.readNext(10000);
+				log.info("Processing batch of size: "+ batch.size());
+				if(etlReader instanceof ETLStager)
+				{
+					passBatch = new ArrayList<>();
+					errorBatch = new ArrayList<>();
+					for(ETLRecord record: batch)
+					{
+						ETLStageRecord stageRecord = (ETLStageRecord) record;
+						if(stageRecord.getError() == STAGE_ERROR.ERROR || stageRecord.getError() == STAGE_ERROR.WARNING)
+							errorBatch.add(record);
+						
+						if(stageRecord.getError() != STAGE_ERROR.ERROR)
+							passBatch.add(record);
+						
+					}
+					batch = null;
+				}
+				else
+					passBatch = batch;
+				
+				if(passBatch != null)
+					log.info("Passed records read for job id: "+jobId + " batch size: "+ passBatch.size() );
+				if(errorBatch != null)
+					log.info("Failed records read for job id: "+jobId + " batch size: "+ errorBatch.size() );
+			}
+			catch(SQLException ex)
+			{
+				log.error("Error while fetching records: "+ex);
+			}
+			Date startDate = new Date();
+			try
+			{
+				if(passBatch !=null)
+					recordsInserted += etlDao.insertETLBatch(insertQuery, targetDB, passBatch, false);
+				if(errorBatch != null)
+					recordsInserted += etlDao.insertETLBatch(stageQuery, targetDB, errorBatch, true);
+				log.info("Job ID " + jobId+" records inserted: "+ recordsInserted);
+				
+			}
+			catch(SQLException ex)
+			{
+				log.error("Error while inserting batch "+ex);
+			}
+			Date endDate = new Date();
+			log.info("Start time"+startDate);
+			log.info("End time"+endDate);
+		}	
+		return recordsInserted;
 	}
 	
-	public ETLQuery getETLQuery(String srcDB, String srcQuery, String targetDB, String targetTable, String targetQuery)
-	{
-		ETLQuery query = new ETLQuery();
-		query.setSrcDB(srcDB);
-		query.setSrcQuery(srcQuery);
-		query.setTargetDB(targetDB);
-		query.setTargetTable(targetTable);
-		query.setTargetQuery(targetQuery);
+public ETLReader<ETLRecord> stageRecordsInBatches(int jobId, ETLReader<ETLRecord> etlReader, JexlContext jc,Map<String, ETLRule> ruleMap,Map<String, String[]> domainMap ) {
 		
-		return query;
+		ETLStaging etlStaging = new ETLStaging(jc,ruleMap, domainMap, etlReader.getRowHeader());
+	 	
+		ETLReader<ETLRecord> etlStager = new ETLStager<ETLRecord>(etlReader, etlStaging);
+		return etlStager;
 	}
 	
 	
 }
+

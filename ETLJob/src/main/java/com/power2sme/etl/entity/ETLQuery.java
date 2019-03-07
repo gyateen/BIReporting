@@ -5,11 +5,8 @@ import lombok.Data;
 @Data
 public class ETLQuery {
 	
-	String srcQuery;
-	String targetQuery;
-	String srcTable;
-	String targetTable;
-	String srcDB;
-	String targetDB;
-
+	String query;
+	String schema;
+	String table;
+	
 }

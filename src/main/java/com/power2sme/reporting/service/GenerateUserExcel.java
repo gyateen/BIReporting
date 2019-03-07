@@ -26,6 +26,7 @@ public class GenerateUserExcel {
 	@Autowired
 	WriteTableToExcel writeTable;
 	
+	
 	public boolean generateExcel(ReportingUser user, ReportTemplate template, String fileName) throws IOException, SQLException
 	{
 		log.info("Generating excel for user:"+user.getUserEmail());

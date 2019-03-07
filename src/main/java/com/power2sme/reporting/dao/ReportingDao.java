@@ -17,6 +17,8 @@ import org.springframework.stereotype.Repository;
 import com.power2sme.reporting.constants.QueryConstants;
 import com.power2sme.reporting.entity.ReportingUser;
 import com.power2sme.reporting.entity.TableInfo;
+import com.power2sme.reporting.excel.CellHeader;
+import com.power2sme.reporting.mapper.SQLExcelTypeMap;
 import com.power2sme.reporting.templates.ReportTemplate;
 
 import lombok.extern.slf4j.Slf4j;
@@ -27,10 +29,12 @@ public class ReportingDao {
 
 	private DataSource dataSource;
 	private JdbcTemplate jdbcTemplate;
+	private SQLExcelTypeMap typeMap;
 	
 	@Autowired
-	public ReportingDao(DataSource dataSource)
+	public ReportingDao(DataSource dataSource, SQLExcelTypeMap typeMap)
 	{
+		this.typeMap = typeMap;
 		this.dataSource = dataSource;
 		jdbcTemplate = new JdbcTemplate(dataSource);
 	}
@@ -98,7 +102,7 @@ public class ReportingDao {
 			ResultSet rs = ps.executeQuery();
 			int columnCount = rs.getMetaData().getColumnCount();
 			populateColumnHeader(result, rs, columnCount);
-			populateResult(result, rs , columnCount);
+			populateResultStrings(result, rs , columnCount);
 			return columnCount;
 		}
 		catch(SQLException ex)
@@ -128,7 +132,7 @@ public class ReportingDao {
 	}
 
 
-	private void populateResult(List<List<String>> result, ResultSet rs, int columnCount) throws SQLException {
+	protected void populateResultStrings(List<List<String>> result, ResultSet rs, int columnCount) throws SQLException {
 		
 		while(rs.next())
 		{
@@ -139,6 +143,66 @@ public class ReportingDao {
 			}
 			result.add(row);
 		}
+	}
+
+	protected void populateResult(List<List<Object>> result, ResultSet rs, int columnCount) throws SQLException {
+		
+		while(rs.next())
+		{
+			List<Object> row = new ArrayList<>();
+			for(int i=1;i<=columnCount;i++)
+			{
+				row.add(rs.getObject(i));
+			}
+			result.add(row);
+		}
+	}
+
+	
+	public List<CellHeader> getTableDataForExcel(TableInfo table, ReportingUser user, List<List<Object>> result) throws SQLException {
+		
+		PreparedStatement ps = null;
+		Connection conn = null; 
+		try
+		{
+			conn = dataSource.getConnection();
+			ps = conn.prepareStatement(table.getCustomQuery());
+			if(table.getCustomQuery().contains("?"))
+				ps.setString(1, user.getUserId());
+			ResultSet rs = ps.executeQuery();
+			int columnCount = rs.getMetaData().getColumnCount();
+			List<CellHeader> headers = getExcelHeader(result, rs);
+			populateResult(result, rs , columnCount);
+			return headers;
+		}
+		catch(SQLException ex)
+		{
+			log.error("Error while querying table: "+ex);
+		}
+		finally
+		{
+			if(ps!=null)
+				ps.close();
+			if(conn != null)
+				conn.close();
+			
+		}
+		return null;
+	}
+
+
+	protected List<CellHeader> getExcelHeader(List<List<Object>> result, ResultSet rs) throws SQLException {
+		
+		List<CellHeader> headers = new ArrayList<>();
+		for(int i=1;i<=rs.getMetaData().getColumnCount();i++)
+		{
+			CellHeader header = new CellHeader();
+			header.setName(rs.getMetaData().getColumnName(i));
+			header.setCellType(typeMap.getType(rs.getMetaData().getColumnType(i)));
+			headers.add(header);
+		}
+			
+		return headers;
 	}
 	
 	

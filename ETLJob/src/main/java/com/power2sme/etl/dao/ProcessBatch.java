@@ -11,6 +11,7 @@ import com.power2sme.etl.utils.BatchCounter;
 import com.power2sme.etl.utils.ExecuteBatch;
 import com.power2sme.etl.entity.ETLColumn;
 import com.power2sme.etl.entity.ETLRecord;
+import com.power2sme.etl.service.ETLStageRecord;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -24,14 +25,16 @@ public class ProcessBatch implements Runnable {
 	BatchCounter executeBatchCount;
 	Connection conn;
 	String query;
-	public static ExecutorService executor = Executors.newFixedThreadPool(5);
+	boolean isError = false;
+	public static ExecutorService executor = Executors.newFixedThreadPool(10);
 	
-	public ProcessBatch(List<ETLRecord> etlRecords , String query, Connection conn, BatchCounter executeBatchCount)
+	public ProcessBatch(List<ETLRecord> etlRecords , String query,  Connection conn, BatchCounter executeBatchCount, boolean isError)
 	{
 		this.etlRecords = etlRecords;
 		this.query = query;
 		this.executeBatchCount = executeBatchCount;
 		this.conn = conn;
+		this.isError = isError;
 	}
 	
 	@Override
@@ -40,37 +43,49 @@ public class ProcessBatch implements Runnable {
 		{
 			
 		PreparedStatement ps = conn.prepareStatement(query);	
+		int batchRecordsCount = 0;
 		for(ETLRecord row: etlRecords)
 		{
-				
-			for(ETLColumn column: row.getColumns())
+			try
+			{	
+				int lastIndex=0;
+				for(ETLColumn column: row.getColumns())
+				{
+					
+					ps.setObject(column.getPosition(), column.getVal());
+					lastIndex++;
+					
+				}
+			if(isError)	
 			{
-				try
-				{
-				ps.setObject(column.getPosition(), column.getVal());
-				}
-				catch(Exception ex)
-				{
-					log.info("Exception while inserting"+ex);
-				}
+				ETLStageRecord stageRecord= (ETLStageRecord) row;
+				ps.setObject(++lastIndex, stageRecord.getRuleIds());
+				ps.setObject(++lastIndex, stageRecord.getError().name());
+				
+			}
+			ps.addBatch();
+			batchRecordsCount++;
+			}
+			catch(SQLException ex)
+			{
+				log.info("Exception while inserting"+ex);
 			}
 			
-			ps.addBatch();
 		
 			
-			
-			
 		}
-		executor.execute(new ExecuteBatch(ps, conn, executeBatchCount));
+		
+		executor.execute(new ExecuteBatch(batchRecordsCount, ps, conn, executeBatchCount));
 		
 		} catch (SQLException e) {
 			log.info("Error while processing batch");
 			e.printStackTrace();
-		}
-		
-		finally
-		{
-			
+			synchronized(conn)
+			{
+				
+				executeBatchCount.incrementCounter();
+				conn.notifyAll();
+			}
 		}
 
 	}

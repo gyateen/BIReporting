@@ -5,11 +5,11 @@
   <parent>
     <groupId>com.power2sme</groupId>
     <artifactId>TableExcelMapper</artifactId>
-    <version>1.0.0</version>
+    <version>1.3.0</version>
   </parent>
   <groupId>com.power2sme</groupId>
   <artifactId>ETLJob</artifactId>
-  <version>1.0.0</version>
+  <version>1.7.0</version>
   <name>ETLJob</name>
   <url>http://maven.apache.org</url>
   <properties>
@@ -19,8 +19,7 @@
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>3.8.1</version>
-      <scope>test</scope>
+      <version>4.12</version>
     </dependency>
     	<dependency>
 			<groupId>org.projectlombok</groupId>
@@ -63,7 +62,6 @@
     <groupId>com.microsoft.sqlserver</groupId>
     <artifactId>sqljdbc4</artifactId>
     <version>4.0</version>
-    <scope>test</scope>
 </dependency>
   
   
@@ -98,6 +96,14 @@
 	    <artifactId>guava</artifactId>
 	    <version>25.1-jre</version>
 	</dependency>
+    
+    <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-jexl -->
+<dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-jexl</artifactId>
+    <version>2.1.1</version>
+</dependency>
+    
     
   </dependencies>
 </project>
