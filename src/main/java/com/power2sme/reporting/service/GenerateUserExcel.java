@@ -1,6 +1,5 @@
 package com.power2sme.reporting.service;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
@@ -27,7 +26,7 @@ public class GenerateUserExcel {
 	WriteTableToExcel writeTable;
 	
 	
-	public boolean generateExcel(ReportingUser user, ReportTemplate template, String fileName) throws IOException, SQLException
+	public XSSFWorkbook generateExcel(ReportingUser user, ReportTemplate template) throws IOException, SQLException
 	{
 		log.info("Generating excel for user:"+user.getUserEmail());
 		XSSFWorkbook workbook = new XSSFWorkbook();
@@ -39,21 +38,15 @@ public class GenerateUserExcel {
 				writeTable.writeExcelSheet(user, table, workbook);
 			}
 		}
-		writeExcel(fileName, workbook);
 		
-		workbook.close();
-		return true;
+		
+		return workbook;
 	}
-	
-	private void writeExcel(String file, XSSFWorkbook workbook ) throws IOException
-	{
-		log.info("Writing excel at location: "+ file);
-		FileOutputStream outputStream = new FileOutputStream(file);
-		workbook.write(outputStream);
-		outputStream.close();
-		log.info("Excel written");
+
+
+	public XSSFWorkbook updateExcel(ReportingUser user, ReportTemplate reportTemplate, XSSFWorkbook workbook) {
+		// TODO Auto-generated method stub
+		return null;
 	}
-	
-	
 	
 }

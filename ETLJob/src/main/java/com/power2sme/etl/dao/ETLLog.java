@@ -14,6 +14,7 @@ public class ETLLog {
 	Date startTime;
 	Date endTime;
 	String queryType;
+	String table;
 	int recordsProcessed = 0;
 	String status;
 	String error;

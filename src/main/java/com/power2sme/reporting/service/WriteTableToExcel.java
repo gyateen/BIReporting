@@ -9,10 +9,12 @@ import java.util.Date;
 import java.util.List;
 
 import org.apache.poi.hssf.usermodel.HSSFCellStyle;
+import org.apache.poi.ss.formula.WorkbookEvaluator;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.xssf.usermodel.XSSFCell;
 import org.apache.poi.xssf.usermodel.XSSFFont;
+import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -164,6 +166,8 @@ public class WriteTableToExcel {
 			{
 				cell.setCellValue(String.valueOf(rowResult.get(i)));
 			}
+			XSSFFormulaEvaluator.evaluateAllFormulaCells(workbook);
+			WorkbookEvaluator eval;
 			
 		}
 	}

@@ -1,5 +1,7 @@
 package com.power2sme.ETLJob;
 
+import static org.junit.Assert.fail;
+
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -8,7 +10,8 @@ import java.util.Properties;
 import org.apache.commons.jexl2.JexlContext;
 import org.apache.commons.jexl2.MapContext;
 import org.junit.Test;
- 
+
+import com.power2sme.etl.exceptions.ETLFailureException;
 import com.power2sme.etl.input.ETLReader;
 import com.power2sme.etl.job.ETLJob;
 import com.power2sme.etl.routines.DateCompareRoutine;
@@ -31,14 +34,22 @@ public class ETLTest {
 	
 	@Test
 	public void testJob() {
-		Properties context = getTestContext();
-		long runId = ETLJob.initJob(context);
-		ETLReader etlReader = ETLJob.runInputJob(Long.valueOf(runId), context);
 		
-		ETLReader staging =  ETLJob.runStagingJob(runId, context, etlReader, getTestJexlContext(), getTestRuleMap(), getTestDomainMap());
-
-		ETLJob.runOutputJob(runId,staging, context);
-		
+		try
+		{
+			Properties context = getTestContext();
+			long runId = ETLJob.initJob(context);
+			ETLReader etlReader = ETLJob.runInputJob(Long.valueOf(runId), context);
+			
+	//		ETLReader staging =  ETLJob.runStagingJob(runId, context, etlReader, getTestJexlContext(), getTestRuleMap(), getTestDomainMap());
+	
+	//		ETLJob.runOutputJob(runId,etlReader, context);
+			fail();
+		}
+		catch(ETLFailureException ex)
+		{
+			
+		}
 	}
 	
 	
@@ -53,13 +64,13 @@ public class ETLTest {
 		contextProp.setProperty("TGT_URL", "jdbc:mysql://192.168.1.14:3306?rewriteBatchedStatements=true");
 		
 		
-		setTestContextForSrcODS(contextProp);
+		setTestContextForSrcLocal(contextProp);
 		
 		contextProp.setProperty("REPORTING_DATE_FORMAT", "yyyy-MM-dd");
 		contextProp.setProperty("JOB_ID", "8");
 		contextProp.setProperty("QRY", getTestQuery());
 		
-		
+		contextProp.setProperty("JOB_TYPE", "test_job");
 		return contextProp;
 	}
 	
@@ -78,12 +89,15 @@ public class ETLTest {
 	public static void setTestContextForSrcLocal(Properties contextProp)
 	{
 		contextProp.setProperty("SRC_DATABASE", "LOCAL");
+		contextProp.setProperty("SRC_SCHEMA", "ods_test");
+		contextProp.setProperty("SRC_TABLE", "test_table");
 		contextProp.setProperty("SRC_DB_SERVER", "MYSQL");
 		contextProp.setProperty("SRC_PASSWORD", "root");
 		contextProp.setProperty("SRC_USER", "root");
 		contextProp.setProperty("SRC_URL", "jdbc:mysql://localhost:3306");
+		
 		contextProp.setProperty("TGT_SCHEMA", "ods_test");
-		contextProp.setProperty("TGT_TABLE", "employee_c");
+		contextProp.setProperty("TGT_TABLE", "employees");
 		contextProp.setProperty("TGT_STAGE_TABLE", "employee_c_stg");
 	}
 

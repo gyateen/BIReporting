@@ -35,6 +35,7 @@ import com.power2sme.etl.entity.ETLColumn;
 import com.power2sme.etl.entity.ETLColumnHeader;
 import com.power2sme.etl.entity.ETLRecord;
 import com.power2sme.etl.entity.ETLRowHeader;
+import com.power2sme.etl.exceptions.ETLFailureException;
 import com.power2sme.etl.input.ETLReader;
 
 import lombok.extern.slf4j.Slf4j;
@@ -90,7 +91,7 @@ public class ETLDao {
 		throw new RuntimeException("throw error to rollback");
 	}
 
-	public int insertETLBatch(String insertQuery,  String targetDB,List<ETLRecord> etlRecords, boolean isError) throws SQLException
+	public int insertETLBatch(String insertQuery,  List<ETLRecord> etlRecords, boolean isError) throws SQLException
 	{
 		
 		Connection conn = null;
@@ -163,7 +164,7 @@ public class ETLDao {
 	 * }); }
 	 */
 
-	public ETLReader<ETLRecord> fetchETLReader(String srcQuery, String srcDB, ETLRowHeader header)
+	public ETLReader<ETLRecord> fetchETLReader(String srcQuery, ETLRowHeader header)
 	{
 		Connection conn;
 		try
@@ -178,13 +179,13 @@ public class ETLDao {
 		}
 		catch(SQLException ex)
 		{
-			throw new RuntimeException(ex);
+			throw new ETLFailureException(ex.getMessage());
 		}
 		
 		
 	}
 	
-	public List<ETLRecord> fetchETLRecords(String srcQuery,String srcDB, ETLRowHeader header)
+	public List<ETLRecord> fetchETLRecords(String srcQuery, ETLRowHeader header)
 	{
 		JdbcTemplate jdbcTemplate = jdbcTemplateMapper.getJdbcTemplate(srcDB);
 		return jdbcTemplate.query(srcQuery, new ETLRowMapper<ETLRecord>(header) {
@@ -224,11 +225,19 @@ public class ETLDao {
 		});
 	}
 	
-	public void truncateTable(String table,  String schema, String db)
+	public void truncateTable(String table,  String schema)
 	{
 		
 		JdbcTemplate jdbcTemplate = jdbcTemplateMapper.getJdbcTemplate(db);
-		jdbcTemplate.execute(constructTruncateTableQuery(table, schema));
+		try
+		{
+			log.info(new Date() + " Truncating table: " + table);
+			jdbcTemplate.execute(constructTruncateTableQuery(table, schema));
+		}
+		catch(RuntimeException ex)
+		{
+			throw new ETLFailureException(ex.getMessage());
+		}
 	}
 	
 	

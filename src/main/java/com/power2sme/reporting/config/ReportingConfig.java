@@ -2,6 +2,7 @@ package com.power2sme.reporting.config;
 
 import javax.sql.DataSource;
 
+import org.hibernate.SessionFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
@@ -30,5 +31,11 @@ public class ReportingConfig {
 	SQLExcelTypeMap getExcelTypeMap()
 	{
 		return new SQLExcelTypeMap();
+	}
+	
+	@Bean
+	SessionFactory getSessionFactory()
+	{
+		return new org.hibernate.cfg.Configuration().buildSessionFactory();
 	}
 }

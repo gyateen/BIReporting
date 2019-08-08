@@ -45,6 +45,8 @@ public class ReportingConstants {
 	public static String DMS_URL = "https://www.power2sme.com/dms/api/v1/uploadfile";
 	public static String DMS_DOWNLOAD_URL = "https://www.power2sme.com/dms/api/v1/downloadfile";
 	public static String MQ_URL = "https://www.power2sme.com/openbd/mq/endpoint.cfc?";
+	public static boolean REPORT_UPDATE = false;
+	public static String REPORT_PATH;
 	
 	
 	
@@ -59,6 +61,8 @@ public class ReportingConstants {
 		DB_URL = contextProp.getProperty("DB_URL");
 		DB_USER = contextProp.getProperty("DB_USER");
 		DB_PASSWORD = contextProp.getProperty("DB_PASSWORD");
+		REPORT_UPDATE = Boolean.parseBoolean(contextProp.getProperty("REPORT_UPDATE"));
+		REPORT_PATH = contextProp.getProperty("REPORT_PATH");
 	}
 	
 	
