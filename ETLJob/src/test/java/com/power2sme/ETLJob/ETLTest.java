@@ -11,6 +11,7 @@ import org.apache.commons.jexl2.JexlContext;
 import org.apache.commons.jexl2.MapContext;
 import org.junit.Test;
 
+import com.power2sme.etl.entity.ETLRecord;
 import com.power2sme.etl.exceptions.ETLFailureException;
 import com.power2sme.etl.input.ETLReader;
 import com.power2sme.etl.job.ETLJob;
@@ -39,11 +40,17 @@ public class ETLTest {
 		{
 			Properties context = getTestContext();
 			long runId = ETLJob.initJob(context);
+			int count = 0;
+			while(count <2)
+			{
+				count++;
+			
 			ETLReader etlReader = ETLJob.runInputJob(Long.valueOf(runId), context);
 			
-	//		ETLReader staging =  ETLJob.runStagingJob(runId, context, etlReader, getTestJexlContext(), getTestRuleMap(), getTestDomainMap());
+	//		ETLReader<ETLRecord> staging =  ETLJob.runStagingJob(runId, context, etlReader, getTestJexlContext(), getTestRuleMap(), getTestDomainMap());
 	
-	//		ETLJob.runOutputJob(runId,etlReader, context);
+			ETLJob.runOutputJob(runId,etlReader, context);
+			}
 			fail();
 		}
 		catch(ETLFailureException ex)
@@ -57,14 +64,9 @@ public class ETLTest {
 	public Properties getTestContext()
 	{
 		Properties contextProp = new Properties();
-		contextProp.setProperty("TGT_DATABASE", "ODS");
-		contextProp.setProperty("TGT_DB_SERVER", "MYSQL");
-		contextProp.setProperty("TGT_PASSWORD", "^C,qaJ36B");
-		contextProp.setProperty("TGT_USER", "team_db_wrhouse");
-		contextProp.setProperty("TGT_URL", "jdbc:mysql://192.168.1.14:3306?rewriteBatchedStatements=true");
 		
 		
-		setTestContextForSrcLocal(contextProp);
+		setTestContextForLocal(contextProp);
 		
 		contextProp.setProperty("REPORTING_DATE_FORMAT", "yyyy-MM-dd");
 		contextProp.setProperty("JOB_ID", "8");
@@ -86,6 +88,26 @@ public class ETLTest {
 		contextProp.setProperty("TGT_STAGE_TABLE", "stg_crm_accounts_rjct");
 	}
 	
+	
+	public static void setTestContextForLocal(Properties contextProp)
+	{
+		setTestContextForSrcLocal(contextProp);
+		setTestContextForTargetLocal(contextProp);
+	}
+	
+	public static void setTestContextForTargetLocal(Properties contextProp) {
+		contextProp.setProperty("TGT_SCHEMA", "ods_test");
+		contextProp.setProperty("TGT_TABLE", "employee_c");
+		contextProp.setProperty("TGT_STAGE_TABLE", "employee_c_stg");
+		contextProp.setProperty("TGT_DATABASE", "ODS");
+		contextProp.setProperty("TGT_DB_SERVER", "MYSQL");
+		contextProp.setProperty("TGT_PASSWORD", "root");
+		contextProp.setProperty("TGT_USER", "root");
+		contextProp.setProperty("TGT_URL", "jdbc:mysql://localhost:3306");
+		
+	}
+
+
 	public static void setTestContextForSrcLocal(Properties contextProp)
 	{
 		contextProp.setProperty("SRC_DATABASE", "LOCAL");
@@ -96,9 +118,6 @@ public class ETLTest {
 		contextProp.setProperty("SRC_USER", "root");
 		contextProp.setProperty("SRC_URL", "jdbc:mysql://localhost:3306");
 		
-		contextProp.setProperty("TGT_SCHEMA", "ods_test");
-		contextProp.setProperty("TGT_TABLE", "employees");
-		contextProp.setProperty("TGT_STAGE_TABLE", "employee_c_stg");
 	}
 
 	
@@ -173,7 +192,7 @@ public class ETLTest {
 		String crmQuery = "SELECT a.id ,a.name ,a.date_entered ,a.date_modified ,a.modified_user_id ,a.created_by ,a.deleted ,a.assigned_user_id ,a.nav_accountid ,ac.pan_c ,ac.cst_number_c ,ac.tin_c ,ac.ecc_number_c ,ac.cin_c ,ac.sme_id_c ,ac.cust_post_grp_c ,ac.gen_bus_pos_c ,UPPER(ac.business_type_c) AS business_type_c ,ac.credit_days_c ,ac.credit_limit_c ,ac.delayed_interest_c ,ac.interest_c ,UPPER(ac.type_c) AS type_c,UPPER(ac.cus_gst_cus_type_c) AS cus_gst_cus_type_c,UPPER(ac.cus_gst_reg_type_c) AS cus_gst_reg_type_c,UPPER(ac.creditrequest_c) AS creditrequest_c,ac.status_c ,UPPER(ac.cluster_name_c) AS cluster_name_c,UPPER(ac.kyc_verification_status_c) AS kyc_verification_status_c,UPPER(ac.kyc_verification_date_c) AS kyc_verification_date_c,ac.sync_with_nav_c ,ac.insuredlimit_c ,UPPER(ac.insurancestatus_c) AS insurancestatus_c,UPPER(ac.ins_reason_c) AS ins_reason_c,ac.insur_app_status_c ,UPPER(ac.totaloutstanding_c) AS totaloutstanding_c,ac.wallet_status_c ,ac.bgcoc_c,ac.sdcoc_c,ac.contact_id_c ,ac.contact_phone_c ,ac.account_category_c ,ac.last_rfq_date_c ,NOW() FROM p2s_bs.bs_crm_accounts a JOIN p2s_bs.bs_crm_accounts_cstm ac ON (a.id = ac.id_c) WHERE a.deleted = 0 AND a.date_entered >= (select date_val from p2s_ctrl.ods_date_ref where src_nm='CRM')";
 		
 		String navQuery = "select[timestamp],[Type],[Calculation Order],[Document Type],[Invoice No_],[Item No_],[Line No_],[Tax_Charge Type],[Tax_Charge Group],[Tax_Charge Code],[Structure Code],[Calculation Type],[Calculation Value],[Quantity Per],[Loading on Inventory],[_ Loading on Inventory],[Payable to Third Party],[Third Party Code],[Account No_],[Base Formula],[Base Amount],[Amount],[Include Base],[Include Line Discount],[Include Invoice Discount],[Charge Basis],[Amount (LCY)],[Header_Line],[Manually Changed],[LCY],[Available for VAT input],[CVD],[CVD Payable to Third Party],[CVD Third Party Code],[Price Inclusive of Tax],[Include PIT Calculation],[Include in TDS Base],[Inc_ GST in TDS Base] ,    SYSDATETIME()  from [Bebb New].[dbo].[BEBB_India$Posted Str Order Line Details];";
-		return crmQuery;
+		return getLocalTestQuery();
 	}
 
 }

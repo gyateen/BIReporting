@@ -46,7 +46,7 @@ public class ETLConstants {
 	public static final String RULEID_DELIMITER = reportingProp.getProperty("RULEID_DELIMITER");
 	public static final String DATE_FORMAT = reportingProp.getProperty("DATE_FORMAT");
 	public static final String MQ_URL = reportingProp.getProperty("MQ_URL");
-	
+	public static final String END_JOB_STATUS = reportingProp.getProperty("END_JOB_STATUS");
 	
 	public static void init(Properties contextProp) {
 		

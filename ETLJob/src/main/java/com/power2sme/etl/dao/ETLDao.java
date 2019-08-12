@@ -26,6 +26,7 @@ import org.springframework.stereotype.Repository;
 import com.google.common.collect.Lists;
 import com.power2sme.etl.jdbc.JdbcTemplateMapper;
 import com.power2sme.etl.mappers.CustomDataTypeMapper;
+import com.power2sme.etl.request.ETLRequest;
 import com.power2sme.etl.utils.BatchCounter;
 import com.power2sme.etl.utils.ETLUtils;
 import com.power2sme.etl.constants.ETLConstants;
@@ -49,6 +50,8 @@ public class ETLDao {
 	ExecutorService executorService = Executors.newFixedThreadPool(10);
 	ExecutorService etlReaderExec = Executors.newFixedThreadPool(10);
 	
+	@Autowired
+	ETLRequest etlRequest;
 	
 	@Autowired
 	public ETLDao(JdbcTemplateMapper jdbcTemplateMapper)
@@ -97,7 +100,7 @@ public class ETLDao {
 		Connection conn = null;
 		try
 		{
-			DataSource dataSource = jdbcTemplateMapper.getJdbcTemplate(targetDB).getDataSource();
+			DataSource dataSource = jdbcTemplateMapper.getJdbcTemplate(etlRequest.getDatabase()).getDataSource();
 			conn = dataSource.getConnection();
 			conn.setAutoCommit(false);
 			List<List<ETLRecord>> batches = Lists.partition(etlRecords, 100);
@@ -169,7 +172,7 @@ public class ETLDao {
 		Connection conn;
 		try
 		{
-			DataSource dataSource = jdbcTemplateMapper.getJdbcTemplate(srcDB).getDataSource();
+			DataSource dataSource = jdbcTemplateMapper.getJdbcTemplate(etlRequest.getDatabase()).getDataSource();
 			conn = dataSource.getConnection();
 			PreparedStatement ps = conn.prepareStatement(srcQuery);
 			ResultSet rs = ps.executeQuery();
@@ -187,7 +190,7 @@ public class ETLDao {
 	
 	public List<ETLRecord> fetchETLRecords(String srcQuery, ETLRowHeader header)
 	{
-		JdbcTemplate jdbcTemplate = jdbcTemplateMapper.getJdbcTemplate(srcDB);
+		JdbcTemplate jdbcTemplate = jdbcTemplateMapper.getJdbcTemplate(etlRequest.getDatabase());
 		return jdbcTemplate.query(srcQuery, new ETLRowMapper<ETLRecord>(header) {
 			
 			@Override
@@ -228,7 +231,7 @@ public class ETLDao {
 	public void truncateTable(String table,  String schema)
 	{
 		
-		JdbcTemplate jdbcTemplate = jdbcTemplateMapper.getJdbcTemplate(db);
+		JdbcTemplate jdbcTemplate = jdbcTemplateMapper.getJdbcTemplate(etlRequest.getDatabase());
 		try
 		{
 			log.info(new Date() + " Truncating table: " + table);
@@ -274,6 +277,7 @@ public class ETLDao {
 				ps.setInt(6,  etlLog.getRecordsProcessed());
 				ps.setString(7, etlLog.getStatus());
 				ps.setString(8, etlLog.getError());
+				ps.setInt(9, etlLog.recordsSelected);
 			}
 			
 		});
@@ -304,6 +308,25 @@ public class ETLDao {
 		
 		
 		return keyHolder.getKey().longValue();
+	}
+	
+	public void updateJobRunEndTime(long runId, Date endDate)
+	{
+		JdbcTemplate jdbcTemplate = jdbcTemplateMapper.getJdbcTemplate(ETLConstants.LOG_DATABASE);
+		String insertQuery = QueryConstants.UPDATE_RUN;
+		jdbcTemplate.update(insertQuery, new PreparedStatementSetter() {
+
+			@Override
+			public void setValues(PreparedStatement ps) throws SQLException {
+				ps.setString(1, ETLConstants.END_JOB_STATUS);
+				ps.setTimestamp(2, new java.sql.Timestamp(endDate.getTime()));
+				
+				ps.setLong(3, runId);
+			
+				
+			}
+			
+		});
 	}
 	
 	private String constructTruncateTableQuery(String table, String db)

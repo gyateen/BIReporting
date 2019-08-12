@@ -5,13 +5,14 @@
   
   <groupId>com.power2sme</groupId>
   <artifactId>ETLJob</artifactId>
-  <version>1.11.0</version>
+  <version>2.0.0-SNAPSHOT</version>
   <packaging>jar</packaging>
   
   <name>ETLJob</name>
   <url>http://maven.apache.org</url>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <java.version>1.8</java.version>
   </properties>
   
   <parent>
@@ -130,4 +131,58 @@
 </dependency>
 
   </dependencies>
+  
+  <build>
+	<plugins>
+	  <plugin>
+	    <groupId>org.apache.maven.plugins</groupId>
+	    <artifactId>maven-compiler-plugin</artifactId>
+	    <version>3.2</version> <!-- or whatever current version -->
+	    <configuration>
+	      <source>1.8</source>
+	      <target>1.8</target>
+	    </configuration>
+	  </plugin>
+	  
+	 <!--  <plugin>
+	<groupId>org.apache.maven.plugins</groupId>
+	<artifactId>maven-jar-plugin</artifactId>
+	<version>3.0.2</version>
+	<configuration>
+	  <archive>
+	    <manifest>
+		<mainClass>com.power2sme.reporting.ReportingJob</mainClass>
+	    </manifest>
+	  </archive>
+	</configuration>
+    </plugin> -->
+	
+	
+	<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-assembly-plugin</artifactId>
+    <executions>
+        <execution>
+            <phase>package</phase>
+            <goals>
+                <goal>single</goal>
+            </goals>
+            <configuration>
+                <archive>
+                <manifest>
+                    <mainClass>
+                        com.power2sme.etl.ETLJob
+                    </mainClass>
+                </manifest>
+                </archive>
+                <descriptorRefs>
+                    <descriptorRef>jar-with-dependencies</descriptorRef>
+                </descriptorRefs>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+</plugins>	
+</build>
+  
 </project>

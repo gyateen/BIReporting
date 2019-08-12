@@ -7,13 +7,16 @@ import java.util.Properties;
 import javax.sql.DataSource;
 
 import org.apache.commons.jexl2.JexlContext;
+import org.springframework.beans.factory.config.Scope;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import com.power2sme.etl.config.DataSourceConfig;
 import com.power2sme.etl.config.ETLConfig;
+import com.power2sme.etl.config.scope.ETLScope;
 import com.power2sme.etl.entity.InputETLQuery;
 import com.power2sme.etl.entity.OutputETLQuery;
 import com.power2sme.etl.exceptions.ETLFailureException;
@@ -21,6 +24,7 @@ import com.power2sme.etl.exceptions.ETLStageFailureException;
 import com.power2sme.etl.input.ETLReader;
 import com.power2sme.etl.jdbc.JdbcTemplateMapper;
 import com.power2sme.etl.logging.LoggingService;
+import com.power2sme.etl.request.ETLRequest;
 import com.power2sme.etl.rules.ETLRule;
 import com.power2sme.etl.service.ETLService;
 import com.power2sme.etl.staging.ETLStager;
@@ -28,18 +32,22 @@ import com.power2sme.etl.staging.ETLStager;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@SpringBootApplication
+@ComponentScan({"com.power2sme.etl"})
 public class ETLJob {
 
 	private static AnnotationConfigApplicationContext context;
+	private static LoggingService loggingService;
 	
 	
-	private static Long runId = null;
+	
 	
 	
 	public synchronized static void initContext()
 	{
+		if(context != null)
+			return;
 		context = (AnnotationConfigApplicationContext) SpringApplication.run(ETLJob.class);
+		loggingService = context.getBean(LoggingService.class);
 	}
 	
 	private static void configureDataSources(Properties contextProp)
@@ -52,22 +60,14 @@ public class ETLJob {
 		
 	}
 	
-	private static synchronized void generateRunId()
-	{
-		if(runId == null)
-		{
-			ETLService etlService = context.getBean(ETLService.class);
-			runId = etlService.initiateJobRun();
-		}
-	}
 	
 	public static long initJob(Properties contextProp)
 	{
 		initContext();
 		configureDataSources(contextProp);
-		generateRunId();
+		
 		log.info("Component initialization complete");
-		return runId;
+		return loggingService.getRunId();
 	}
 	
 	
@@ -97,17 +97,22 @@ public class ETLJob {
 
 	public static ETLReader runInputJob(Long runId, Properties contextProp)
 	{
-		
-		
-			ETLService etlService = context.getBean(ETLService.class);
-			int jobId = Integer.parseInt(contextProp.getProperty("JOB_ID"));
-			String table = contextProp.getProperty("SRC_TABLE");
-			log.info("Starting input job for job id: "+ jobId +" run id:"+runId);
-			ETLReader etlReader = null;
 			
+			String database = contextProp.getProperty("SRC_DATABASE");
 			String schema = contextProp.getProperty("SRC_SCHEMA");
 			String srcQuery = contextProp.getProperty("QRY");
 			String jobType = contextProp.getProperty("JOB_TYPE");
+			String table = contextProp.getProperty("SRC_TABLE");
+			
+			ETLRequest request = new ETLRequest(database,table,schema, srcQuery, jobType );
+			ETLScope.put(request);
+			ETLService etlService = context.getBean(ETLService.class);
+			int jobId = Integer.parseInt(contextProp.getProperty("JOB_ID"));
+			
+			log.info("Starting input job for job id: "+ jobId +" run id:"+runId);
+			ETLReader etlReader = null;
+			
+			
 			Date startDate = new Date();
 			try
 			{
@@ -120,12 +125,12 @@ public class ETLJob {
 			catch(ETLFailureException ex)
 			{
 				log.error("Error while executing output job"+jobId+ " "+ex);
-				loggingService.logFailureAndSendMail(runId, jobId, startDate, new Date(), schema.concat(".").concat(table),jobType, 0, ex);
+				loggingService.logFailureAndSendMail(runId, jobId, startDate, new Date(), schema.concat(".").concat(table),jobType, 0, 0, ex);
 				throw ex;
 			}
 			catch(RuntimeException ex)
 			{
-				loggingService.logJob(runId,jobId, startDate, new Date(), schema.concat(".").concat(table),0, ex);
+				loggingService.logJob(runId,jobId, startDate, new Date(), schema.concat(".").concat(table),0,0, ex);
 				log.error("Error while executing job "+jobId+ " "+ex.getMessage());
 				
 			}
@@ -136,13 +141,18 @@ public class ETLJob {
 	
 	public static ETLReader runStagingJob(Long runId, Properties contextProp, ETLReader etlReader, JexlContext jexlContext, Map<String, ETLRule> ruleMap, Map<String, String[]> domainMap)
 	{
+		
+		
+		String database = contextProp.getProperty("SRC_DATABASE");
+		String schema = contextProp.getProperty("TGT_SCHEMA");
+		String srcQuery = contextProp.getProperty("QRY");
+		String jobType = contextProp.getProperty("JOB_TYPE");
+		String table = contextProp.getProperty("TGT_TABLE");
 		int jobId = Integer.parseInt(contextProp.getProperty("JOB_ID"));
 		ETLService etlService = context.getBean(ETLService.class);
 		log.info("Starting staging job for job id: "+ jobId +" run id:"+runId);
-		String schema = contextProp.getProperty("TGT_SCHEMA");
-		String table = contextProp.getProperty("TGT_TABLE");
 		Date jobStartDate = new Date();
-		String jobType = contextProp.getProperty("JOB_TYPE");
+		
 		
 		if(etlReader == null)
 			return null;
@@ -154,13 +164,13 @@ public class ETLJob {
 		catch(ETLFailureException ex)
 		{
 			log.error("Error while executing staging job"+jobId+ " "+ex);
-			loggingService.logFailureAndSendMail(runId, jobId, jobStartDate, new Date(), schema.concat(".").concat(table),jobType,0, ex);
+			loggingService.logFailureAndSendMail(runId, jobId, jobStartDate, new Date(), schema.concat(".").concat(table),jobType,0,0, ex);
 			throw ex;
 		}
 		catch(RuntimeException ex)
 		{
 			log.error("Error while executing staging job"+jobId+ " "+ex);
-			loggingService.logJob(runId, jobId, jobStartDate, new Date(), schema.concat(".").concat(table),0, ex);
+			loggingService.logJob(runId, jobId, jobStartDate, new Date(), schema.concat(".").concat(table),0,0, ex);
 			
 		}
 		
@@ -170,51 +180,68 @@ public class ETLJob {
 	
 	public static void runOutputJob(long runId, ETLReader etlReader, Properties contextProp)
 	{
+		
+		
+		String database = contextProp.getProperty("TGT_DATABASE");
+		String schema = contextProp.getProperty("TGT_SCHEMA");
+		String jobType = contextProp.getProperty("JOB_TYPE");
+		String table = contextProp.getProperty("TGT_TABLE");
+		
 		int jobId = Integer.parseInt(contextProp.getProperty("JOB_ID"));
 		ETLService etlService = context.getBean(ETLService.class);
 		log.info("Starting output job for job id: "+ jobId +" run id:"+runId);
-		String schema = contextProp.getProperty("TGT_SCHEMA");
-		String table = contextProp.getProperty("TGT_TABLE");
-			
+		
+		ETLRequest request;
 		String stageTable = contextProp.getProperty("TGT_STAGE_TABLE");
+		if(stageTable !=null)
+		{
+			request = new ETLStageRequest(database,table, stageTable, schema, jobType );
+		}
+		else
+			request = new ETLRequest(database,table,schema, jobType );
+		
+		ETLScope.put(request);
+		
 		Date jobStartDate = new Date();
 	
 		if(etlReader == null)
 			return;		
-		String jobType = contextProp.getProperty("JOB_TYPE");
 	//	OutputETLQuery outputQuery = etlService.getETLQueryForOutput(table, stageTable, schema, etlReader.getRowHeader().getColumnHeaders().size(),null);
 		int totalRecordsInserted = 0;
 		try
 		{
 		//	totalRecordsInserted = etlService.executeOutputETLQuery(jobId, etlReader, outputQuery,contextProp.getProperty("TGT_DATABASE") );	
 			totalRecordsInserted = etlService.execute(etlReader, schema, table, stageTable);
+			loggingService.logJob(runId, jobId, jobStartDate, new Date(), jobType, request.getSelectCount(), totalRecordsInserted);
 		}
 		
 		catch(ETLStageFailureException ex)
 		{
 			log.error("Error while executing staging job"+jobId+ " "+ex);
-			loggingService.logFailureAndSendMail(runId, jobId, jobStartDate, new Date(), schema.concat(".").concat(stageTable), jobType,totalRecordsInserted, ex);
+			loggingService.logFailureAndSendMail(runId, jobId, jobStartDate, new Date(), schema.concat(".").concat(stageTable), jobType,request.getSelectCount(), totalRecordsInserted, ex);
 			throw ex;
 		}
 		catch(ETLFailureException ex)
 		{
 			log.error("Error while executing output job"+jobId+ " "+ex);
-			loggingService.logFailureAndSendMail(runId, jobId, jobStartDate, new Date(), schema.concat(".").concat(table), jobType,totalRecordsInserted, ex);
+			loggingService.logFailureAndSendMail(runId, jobId, jobStartDate, new Date(), schema.concat(".").concat(table), jobType,request.getSelectCount(), totalRecordsInserted, ex);
 			throw ex;
 		}
 		catch(RuntimeException ex)
 		{
 			log.error("Error while executing output job"+jobId+ " "+ex);
-			loggingService.logJob(runId, jobId, jobStartDate, new Date(), jobType,totalRecordsInserted, ex);
+			loggingService.logJob(runId, jobId, jobStartDate, new Date(), jobType,request.getSelectCount(), totalRecordsInserted, ex);
 			
 		}
 		finally
 		{
+			
 			etlReader.closeReader();
 		}
 		
 			
 	}
+	
 	
 	
 		

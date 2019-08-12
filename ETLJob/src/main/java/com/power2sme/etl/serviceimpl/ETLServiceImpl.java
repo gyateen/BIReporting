@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.apache.commons.jexl2.JexlContext;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 
 import com.google.common.collect.Lists;
@@ -21,6 +22,7 @@ import com.power2sme.etl.exceptions.ETLStageFailureException;
 import com.power2sme.etl.input.ETLReader;
 import com.power2sme.etl.job.ETLData;
 import com.power2sme.etl.logging.LoggingService;
+import com.power2sme.etl.request.ETLRequest;
 import com.power2sme.etl.rules.ETLRule;
 import com.power2sme.etl.service.ETLService;
 import com.power2sme.etl.service.ETLStageRecord;
@@ -32,10 +34,14 @@ import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
+@Scope
 public class ETLServiceImpl implements ETLService{
 
 	ETLDao etlDao;
 	LoggingService loggingService;
+	
+	@Autowired
+	ETLRequest etlRequest;
 	
 	@Autowired
 	public ETLServiceImpl(ETLDao etlDao, LoggingService loggingService)
@@ -164,11 +170,6 @@ public class ETLServiceImpl implements ETLService{
 		return etlQuery;
 	}
 
-	public long initiateJobRun() {
-		
-		
-		return etlDao.insertRunForJob();
-	}
 
 	public int insertRecordsInBatches(String insertQuery, String stageQuery, ETLReader<ETLRecord> etlReader) {
 		
@@ -182,13 +183,16 @@ public class ETLServiceImpl implements ETLService{
 			{
 				batch = etlReader.readNext(10000);
 				log.info("Processing batch of size: "+ batch.size());
+				etlRequest.setSelectCount(etlRequest.getSelectCount() + batch.size());
 				if(etlReader instanceof ETLStager)
 				{
 					passBatch = new ArrayList<>();
 					errorBatch = new ArrayList<>();
 					for(ETLRecord record: batch)
 					{
+						
 						ETLStageRecord stageRecord = (ETLStageRecord) record;
+						
 						if(stageRecord.getError() == STAGE_ERROR.ERROR || stageRecord.getError() == STAGE_ERROR.WARNING)
 							errorBatch.add(record);
 						
@@ -214,9 +218,14 @@ public class ETLServiceImpl implements ETLService{
 			try
 			{
 				if(passBatch !=null)
+				{
+					
 					recordsInserted += etlDao.insertETLBatch(insertQuery, passBatch, false);
+				}
 				if(errorBatch != null)
+				{
 					recordsInserted += etlDao.insertETLBatch(stageQuery, errorBatch, true);
+				}
 				log.info("Total records inserted in this batch: "+ recordsInserted);
 				
 			}
@@ -231,6 +240,7 @@ public class ETLServiceImpl implements ETLService{
 		return recordsInserted;
 	}
 	
+	@Override
 public ETLReader<ETLRecord> stageRecordsInBatches(int jobId, ETLReader<ETLRecord> etlReader, JexlContext jc,Map<String, ETLRule> ruleMap,Map<String, String[]> domainMap ) {
 		
 		ETLStaging etlStaging = new ETLStaging(jc,ruleMap, domainMap, etlReader.getRowHeader());
