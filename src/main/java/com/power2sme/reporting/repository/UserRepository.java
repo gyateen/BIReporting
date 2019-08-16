@@ -1,4 +1,4 @@
-package com.power2sme.reporting.repository;
+/*package com.power2sme.reporting.repository;
 
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
@@ -33,3 +33,4 @@ public class UserRepository {
 		session.clear();
 	}
 }
+*/

@@ -18,7 +18,7 @@ import com.power2sme.reporting.constants.ReportingConstants;
 import com.power2sme.reporting.dao.ReportingDao;
 import com.power2sme.reporting.entity.ReportingUser;
 import com.power2sme.reporting.mail.MailService;
-import com.power2sme.reporting.repository.UserRepository;
+//import com.power2sme.reporting.repository.UserRepository;
 import com.power2sme.reporting.templates.ReportTemplate;
 import com.power2sme.reporting.validations.ReportingValidator;
 
@@ -40,16 +40,15 @@ public class ReportingService {
 	@Autowired
 	MailService mailService;
 	
-	UserRepository userRepo;
+//	UserRepository userRepo;
 	
 	@Autowired
 	ReportingValidator validator;
 	
-	@Autowired
-	public ReportingService(UserRepository userRepo)
-	{
-		this.userRepo = userRepo;
-	}
+	/*
+	 * @Autowired public ReportingService(UserRepository userRepo) { this.userRepo =
+	 * userRepo; }
+	 */
 	
 	public void generateAndSendReports()
 	{
@@ -83,6 +82,12 @@ public class ReportingService {
 						fileName = updateReport(user, reportTemplate, ReportingConstants.REPORT_PATH);
 					else
 						fileName = createReport(user, reportTemplate);
+					if(fileName == null)
+					{
+						log.info("Report cannot be generated for user: " + user.getUserEmail());
+						return;
+					}
+					
 					log.info("Report creation complete for user"+user.getUserEmail());
 					String link = uploadReportDMS(fileName);
 					log.info("Report uploaded to dms successfully: "+ link);
@@ -101,8 +106,11 @@ public class ReportingService {
 	
 	public String createReport(ReportingUser user, ReportTemplate reportTemplate) throws Exception
 	{
-		String fileName = generateUserFileName(user, reportTemplate);
 		XSSFWorkbook workbook = excelService.generateExcel(user, reportTemplate);
+		if(workbook == null)
+			return null;
+		String fileName = generateUserFileName(user, reportTemplate);
+		
 		writeExcel(fileName, workbook);
 		return fileName;
 	}

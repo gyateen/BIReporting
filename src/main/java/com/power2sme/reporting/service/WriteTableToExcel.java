@@ -38,14 +38,14 @@ public class WriteTableToExcel {
 	ReportingDao reportingDao;
 	
 	
-	public void writeExcelSheet(ReportingUser user, TableInfo table, XSSFWorkbook workbook) throws SQLException {
+	public boolean writeExcelSheet(ReportingUser user, TableInfo table, XSSFWorkbook workbook) throws SQLException {
 
 		XSSFSheet sheet = workbook.createSheet(table.getSheetName());
 		int rowNum = 0;
 		List<List<Object>> resultSet = new ArrayList<>();
 		List<CellHeader> headers = reportingDao.getTableDataForExcel(table, user, resultSet);
-		if(headers == null)
-			return;
+		if(headers == null || resultSet == null || resultSet.isEmpty())
+			return false;
 		XSSFRow row = sheet.createRow(rowNum++);
 		populateHeader(row, headers);
 		boolean isHeader = true;
@@ -63,7 +63,7 @@ public class WriteTableToExcel {
 		}
 		
 		autoSizeColumns(sheet, headers.size());
-		
+		return true;
 		
 	}
 	

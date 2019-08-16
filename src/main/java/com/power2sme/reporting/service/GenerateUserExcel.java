@@ -31,16 +31,17 @@ public class GenerateUserExcel {
 		log.info("Generating excel for user:"+user.getUserEmail());
 		XSSFWorkbook workbook = new XSSFWorkbook();
 		List<TableInfo> userTables = reportingDao.getReportingTables(template.getReportId());
+		boolean sheetWritten = false;
 		if(userTables != null)
 		{	
 			for(TableInfo table: userTables)
 			{
-				writeTable.writeExcelSheet(user, table, workbook);
+				sheetWritten = sheetWritten || writeTable.writeExcelSheet(user, table, workbook);
 			}
 		}
 		
-		
-		return workbook;
+	
+		return !sheetWritten ? null : workbook;
 	}
 
 
