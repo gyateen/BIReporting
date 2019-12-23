@@ -85,7 +85,7 @@ public class ReportingService {
 					if(fileName == null)
 					{
 						log.info("Report cannot be generated for user: " + user.getUserEmail());
-						return;
+						continue;
 					}
 					
 					log.info("Report creation complete for user"+user.getUserEmail());
